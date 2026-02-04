@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sandboxed_env"
+version = "1.4.0"
+description = "Capability-based Python sandbox (v1.4)"
+requires-python = ">=3.10"

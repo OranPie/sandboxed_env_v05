@@ -1,0 +1,39 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "syscalls": [
+    {
+      "names": [
+        "read",
+        "write",
+        "close",
+        "fstat",
+        "mmap",
+        "munmap",
+        "brk",
+        "rt_sigaction",
+        "rt_sigprocmask",
+        "rt_sigreturn",
+        "ioctl",
+        "pread64",
+        "readlink",
+        "getpid",
+        "gettid",
+        "getuid",
+        "geteuid",
+        "getgid",
+        "getegid",
+        "getcwd",
+        "clock_gettime",
+        "nanosleep",
+        "futex",
+        "sched_yield",
+        "set_tid_address",
+        "set_robust_list",
+        "prlimit64",
+        "exit",
+        "exit_group"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}
