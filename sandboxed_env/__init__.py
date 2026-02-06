@@ -19,6 +19,8 @@ from .presets import PolicyPreset, policy_presets, get_policy_preset
 from .runner import RunnerSpec, local_runner, command_runner
 from .audit import AuditSink, AuditSinkSpec, build_audit_sinks, audit_sink_specs_from_list, audit_sink_specs_to_list
 from .schema import SchemaError, validate_schema, validate_schema_cached
+from .i18n import register_bundle, translate, translate_error, translate_message
+from .plugin_system import PluginSpec, PluginContext, apply_plugins
 
 __all__ = [
     "SandboxedEnv",
@@ -61,4 +63,11 @@ __all__ = [
     "SchemaError",
     "validate_schema",
     "validate_schema_cached",
+    "register_bundle",
+    "translate",
+    "translate_error",
+    "translate_message",
+    "PluginSpec",
+    "PluginContext",
+    "apply_plugins",
 ]

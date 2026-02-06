@@ -26,6 +26,8 @@
 - **类型约束**：可选输入/输出 schema 校验
 - **模块代理加固**：仅可调用属性、返回只读包装
 - **OS 加固**：seccomp profile、默认禁网、文件系统沙箱（尽力而为）
+- **插件系统**：通过插件组合 policy/roots/caps/audit
+- **i18n**：常见错误信息翻译（en、zh-CN）
 
 ## 安装 / 目录结构
 
@@ -96,6 +98,36 @@ __stats__ = {"items": 42}
 
 这些会体现在 `SandboxResult.result`、`SandboxResult.events`（追加），
 以及 `SandboxResult.stats["user"]` 中。Token scopes 在 `SandboxResult.stats["token_scopes"]` 中。
+
+## 插件（新增）
+
+插件可用于添加能力、根对象、审计 sink，或调整 policy。
+
+```python
+from sandboxed_env import SandboxedEnv, PluginSpec
+
+env = SandboxedEnv(
+    plugins=[
+        PluginSpec(name="math", plugin_path="sandboxed_env.plugins.math_roots:MathRootsPlugin"),
+        PluginSpec(name="text", plugin_path="sandboxed_env.plugins.text_caps:TextCapsPlugin", config={"max_calls": 50}),
+        PluginSpec(name="numpy", plugin_path="sandboxed_env.plugins.numpy_caps:NumpyCapsPlugin"),
+        PluginSpec(name="pandas", plugin_path="sandboxed_env.plugins.pandas_caps:PandasCapsPlugin"),
+        PluginSpec(name="dateutil", plugin_path="sandboxed_env.plugins.dateutil_caps:DateutilCapsPlugin"),
+    ],
+)
+
+r = env.execute("__result__ = upper('hello') + ' ' + str(math.pi)")
+```
+
+## i18n（新增）
+
+传入 `locale` 即可翻译常见错误信息：
+
+```python
+env = SandboxedEnv(locale="zh-CN")
+r = env.execute("import os")
+print(r.error.message)  # 禁止 import
+```
 
 ## 升级说明（v1.4）
 

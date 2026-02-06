@@ -26,6 +26,8 @@ A practical, capability-based Python sandbox.
 - **Type shaping**: optional input/output schema validation
 - **Module proxy hardening**: callable-only attrs, read-only return wrapping
 - **OS hardening**: seccomp profile, no-network default, filesystem sandbox (best-effort)
+- **Plugin system**: compose policy/roots/caps/audit via reusable plugins
+- **i18n**: translate common error messages (en, zh-CN)
 
 ## Installation / layout
 
@@ -96,6 +98,36 @@ __stats__ = {"items": 42}
 
 These are surfaced on `SandboxResult.result`, `SandboxResult.events` (appended),
 and `SandboxResult.stats["user"]`. Token scopes are exposed in `SandboxResult.stats["token_scopes"]`.
+
+## Plugins (new)
+
+Plugins can add capabilities, roots, audit sinks, or tweak policy.
+
+```python
+from sandboxed_env import SandboxedEnv, PluginSpec
+
+env = SandboxedEnv(
+    plugins=[
+        PluginSpec(name="math", plugin_path="sandboxed_env.plugins.math_roots:MathRootsPlugin"),
+        PluginSpec(name="text", plugin_path="sandboxed_env.plugins.text_caps:TextCapsPlugin", config={"max_calls": 50}),
+        PluginSpec(name="numpy", plugin_path="sandboxed_env.plugins.numpy_caps:NumpyCapsPlugin"),
+        PluginSpec(name="pandas", plugin_path="sandboxed_env.plugins.pandas_caps:PandasCapsPlugin"),
+        PluginSpec(name="dateutil", plugin_path="sandboxed_env.plugins.dateutil_caps:DateutilCapsPlugin"),
+    ],
+)
+
+r = env.execute("__result__ = upper('hello') + ' ' + str(math.pi)")
+```
+
+## i18n (new)
+
+Pass `locale` to translate common error messages:
+
+```python
+env = SandboxedEnv(locale="zh-CN")
+r = env.execute("import os")
+print(r.error.message)  # 禁止 import
+```
 
 ## Upgrade notes (v1.4)
 

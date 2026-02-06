@@ -34,6 +34,8 @@ from .audit import AuditSink, AuditSinkSpec, AuditStream, build_audit_sinks, aud
 from .capabilities import TokenScope, ScopeBundle
 from .schema import validate_schema_cached, SchemaError
 from .os_sandbox import apply_os_sandbox
+from .i18n import translate_error, timeout_message
+from .plugin_system import PluginContext, PluginSpec, apply_plugins
 
 def _maybe_setsid() -> None:
     if os.name != "nt":
@@ -326,17 +328,43 @@ class SandboxedEnv:
         audit_sink_specs: Optional[List[AuditSinkSpec]] = None,
         session_tokens: Optional[int] = None,
         tenant_tokens: Optional[int] = None,
+        plugins: Optional[List[PluginSpec | Any]] = None,
+        locale: str = "en",
     ):
+        self.locale = locale or "en"
         self.policy = policy or default_policy_v14()
         self.mode = mode
-        self.cap_specs = cap_specs or []
-        self.cap_registry = cap_registry or {}
+        self.cap_specs = list(cap_specs or [])
+        self.cap_registry = dict(cap_registry or {})
         self.root_specs = list(root_specs or [])
         self.runner = runner or local_runner()
         self.audit_sinks = list(audit_sinks or [])
         self.audit_sink_specs = list(audit_sink_specs or [])
         self.session_tokens = session_tokens
         self.tenant_tokens = tenant_tokens
+
+        if plugins:
+            ctx = PluginContext(
+                policy=self.policy,
+                cap_specs=self.cap_specs,
+                cap_registry=self.cap_registry,
+                roots=roots or {},
+                root_specs=self.root_specs,
+                audit_sinks=self.audit_sinks,
+                audit_sink_specs=self.audit_sink_specs,
+                runner=self.runner,
+                locale=self.locale,
+            )
+            apply_plugins(plugins, ctx)
+            self.policy = ctx.policy
+            self.cap_specs = ctx.cap_specs
+            self.cap_registry = ctx.cap_registry
+            self.root_specs = ctx.root_specs
+            self.audit_sinks = ctx.audit_sinks
+            self.audit_sink_specs = ctx.audit_sink_specs
+            self.runner = ctx.runner
+            self.locale = ctx.locale
+            roots = ctx.roots
 
         if self.mode == "fork" and os.name == "nt":
             raise ValueError("fork mode is not supported on Windows")
@@ -377,7 +405,8 @@ class SandboxedEnv:
             try:
                 validate_schema_cached(to_safe_json(inputs) if inputs is not None else None, self.policy.input_schema)
             except SchemaError as e:
-                return SandboxResult(ok=False, error=ErrorInfo(stage="schema", type="SchemaError", message=str(e)))
+                err = translate_error(ErrorInfo(stage="schema", type="SchemaError", message=str(e)), self.locale)
+                return SandboxResult(ok=False, error=err)
         if self.runner.kind == "command":
             if self.mode != "spawn":
                 raise ValueError("command runner requires spawn mode")
@@ -418,17 +447,20 @@ class SandboxedEnv:
                 out, err = p.communicate(json.dumps(payload).encode("utf-8"), timeout=self.policy.timeout_ms / 1000.0)
             except subprocess.TimeoutExpired:
                 _terminate_popen(p)
-                return SandboxResult(ok=False, error=ErrorInfo(stage="timeout", type="TimeoutError", message=f"exceeded {self.policy.timeout_ms}ms"))
+                err = ErrorInfo(stage="timeout", type="TimeoutError", message=timeout_message(self.policy.timeout_ms, self.locale))
+                return SandboxResult(ok=False, error=err)
 
             if not out:
                 msg = err.decode("utf-8", errors="ignore") if err else "no payload from worker"
-                return SandboxResult(ok=False, error=ErrorInfo(stage="worker", type="WorkerError", message=msg))
+                err = ErrorInfo(stage="worker", type="WorkerError", message=msg)
+                return SandboxResult(ok=False, error=translate_error(err, self.locale))
 
             try:
                 payload = json.loads(out.decode("utf-8"))
             except Exception as e:
                 msg = err.decode("utf-8", errors="ignore") if err else ""
-                return SandboxResult(ok=False, error=ErrorInfo(stage="worker", type=type(e).__name__, message=f"invalid payload: {msg}"))
+                err = ErrorInfo(stage="worker", type=type(e).__name__, message=f"invalid payload: {msg}")
+                return SandboxResult(ok=False, error=translate_error(err, self.locale))
         else:
             ctx = mp.get_context("fork" if self.mode == "fork" else "spawn")
             q: mp.Queue = ctx.Queue()
@@ -442,16 +474,18 @@ class SandboxedEnv:
 
             if p.is_alive():
                 _terminate_process(p)
-                return SandboxResult(ok=False, error=ErrorInfo(stage="timeout", type="TimeoutError", message=f"exceeded {self.policy.timeout_ms}ms"))
+                err = ErrorInfo(stage="timeout", type="TimeoutError", message=timeout_message(self.policy.timeout_ms, self.locale))
+                return SandboxResult(ok=False, error=err)
 
             try:
                 payload = q.get_nowait()
             except Exception:
-                return SandboxResult(ok=False, error=ErrorInfo(stage="worker", type="WorkerError", message="no payload from worker"))
+                err = ErrorInfo(stage="worker", type="WorkerError", message="no payload from worker")
+                return SandboxResult(ok=False, error=translate_error(err, self.locale))
 
         metrics = Metrics(**(payload.get("metrics") or {}))
         err = payload.get("error")
-        err_obj = ErrorInfo(**err) if err else None
+        err_obj = translate_error(ErrorInfo(**err), self.locale) if err else None
         events = [Event(**e) for e in (payload.get("events") or [])]
         stats = payload.get("stats") or {}
         scopes = stats.get("token_scopes") or {}
@@ -468,7 +502,7 @@ class SandboxedEnv:
                     ok=False,
                     result=payload.get("result"),
                     locals=payload.get("locals") or {},
-                    error=ErrorInfo(stage="schema", type="SchemaError", message=str(e)),
+                    error=translate_error(ErrorInfo(stage="schema", type="SchemaError", message=str(e)), self.locale),
                     events=events,
                     metrics=metrics,
                     stats=payload.get("stats"),

@@ -16,6 +16,7 @@
 - 运行器：`RunnerSpec`
 - 预设：`PolicyPreset`
 - 返回结构：`SandboxResult`
+- 插件：`PluginSpec`
 
 ## 核心入口：SandboxedEnv
 
@@ -33,6 +34,8 @@ SandboxedEnv(
     audit_sink_specs: Optional[List[AuditSinkSpec]] = None,
     session_tokens: Optional[int] = None,
     tenant_tokens: Optional[int] = None,
+    plugins: Optional[List[PluginSpec]] = None,
+    locale: str = "en",
 )
 ```
 
@@ -48,6 +51,8 @@ SandboxedEnv(
 - `audit_sinks`：仅 `fork` 模式可用的审计 sink 实例列表。
 - `audit_sink_specs`：`spawn`/`command` 模式可序列化的审计配置。
 - `session_tokens` / `tenant_tokens`：跨多次执行持久化 token scope。
+- `plugins`：插件列表（可添加能力、roots、审计 sink 或调整 policy）。
+- `locale`：错误信息本地化语言（默认 `en`，支持 `zh-CN`）。
 
 Spawn-safe 约束（`mode != "fork"`）：
 
@@ -237,6 +242,21 @@ RootSpec(
 - `allow_tree`：SafeModuleProxy 白名单树。
   - 允许调用：`"sin": True`
   - 允许常量：`"pi": {"value": True}`
+
+## 插件：PluginSpec
+
+```python
+PluginSpec(
+    name: str,
+    plugin_path: str,  # "pkg.mod:PluginClass" or "pkg.mod:factory"
+    config: Optional[Any] = None,
+    priority: int = 0,
+)
+```
+
+- `plugin_path`：点路径到插件类或工厂函数。
+- `config`：可选配置；若为 dict 会以 `**config` 方式传入。
+- `priority`：数值越小越早执行（稳定排序）。
 
 ## 审计：AuditSinkSpec
 
